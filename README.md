@@ -10,6 +10,12 @@ This MVP uses Node's built-in fetch for static HTML analysis and an optional Pla
 node src/cli.js https://example.com --out reports/example.md
 ```
 
+Audit a small site from its sitemap:
+
+```bash
+node src/cli.js https://example.com --site --max-pages 25 --out reports/site-audit.md
+```
+
 Skip browser rendering:
 
 ```bash
@@ -31,6 +37,7 @@ The report includes:
 - Fix, validation, and tool guidance for each issue.
 - Quick wins that can ship in under an hour.
 - A 30-day action plan.
+- Site mode with sitemap discovery, issue grouping, affected URLs, and template hints.
 
 ## Audit Areas
 
@@ -46,7 +53,6 @@ The report includes:
 
 ## Roadmap
 
-- Crawl multiple URLs and template groups.
 - Export HTML/PDF reports.
 - Add Lighthouse/PageSpeed integrations.
 - Add GitHub Actions workflow for scheduled audits.

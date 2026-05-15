@@ -1,6 +1,10 @@
 const SEVERITIES = ["Critical", "High", "Medium", "Low"];
 
 export function renderMarkdownReport(audit) {
+  if (audit.type === "site") {
+    return renderSiteMarkdownReport(audit);
+  }
+
   const grouped = groupBySeverity(audit.issues);
   const quickWins = audit.issues.filter((issue) => issue.effort === "Low").slice(0, 6);
   const blockers = audit.issues.filter((issue) => issue.severity === "Critical" || issue.severity === "High");
@@ -77,6 +81,78 @@ ${audit.auditNotes?.length ? audit.auditNotes.map((note) => `- ${note}`).join("\
 `;
 }
 
+function renderSiteMarkdownReport(audit) {
+  const grouped = groupBySeverity(audit.issues);
+  const quickWins = audit.issues.filter((issue) => issue.effort === "Low").slice(0, 8);
+  const blockers = audit.issues.filter((issue) => issue.severity === "Critical" || issue.severity === "High");
+  const totalPageIssues = audit.pages.reduce((sum, page) => sum + page.issues.length, 0);
+
+  return `# Site Technical SEO & Analytics Audit
+
+**Start URL:** ${audit.url}  
+**Audited at:** ${audit.auditedAt}  
+**URLs audited:** ${audit.pages.length}  
+**Discovery:** ${discoverySummary(audit)}
+
+## Executive Summary
+
+${siteExecutiveSummary(audit, blockers, totalPageIssues)}
+
+## Priority Matrix
+
+| Priority | Issue | Area | Effort | Affected URLs | Templates | Why it matters |
+| --- | --- | --- | --- | ---: | --- | --- |
+${audit.issues.map((issue) => `| ${issue.severity} | ${escapeTable(issue.title)} | ${issue.area} | ${issue.effort} | ${issue.affectedUrls.length} | ${escapeTable(issue.templates.join(", "))} | ${escapeTable(issue.evidence)} |`).join("\n")}
+
+## Fix, Validation, Tool Plan
+
+| Issue | Fix | Validation | Suggested tools |
+| --- | --- | --- | --- |
+${audit.issues.map((issue) => `| ${escapeTable(issue.title)} | ${escapeTable(issue.fix)} | ${escapeTable(issue.validation)} | ${toolFor(issue.area)} |`).join("\n")}
+
+## Affected URL Examples
+
+${audit.issues.slice(0, 12).map((issue) => affectedUrlBlock(issue)).join("\n\n")}
+
+## Quick Wins Under One Hour
+
+${quickWins.length ? quickWins.map((issue) => `- **${issue.title}:** ${issue.fix} (${issue.affectedUrls.length} URL${issue.affectedUrls.length === 1 ? "" : "s"})`).join("\n") : "- No low-effort quick wins were detected in the site audit."}
+
+## 30-Day Action Plan
+
+### Week 1: Critical patterns and measurement
+
+${weekItems(grouped.Critical.concat(grouped.High).slice(0, 6))}
+
+### Week 2: Templates with repeated SEO issues
+
+${weekItems(audit.issues.filter((issue) => issue.affectedUrls.length > 1 && ["indexability", "on-page", "schema"].includes(issue.area)).slice(0, 6))}
+
+### Week 3: Performance, mobile, trust, and security
+
+${weekItems(audit.issues.filter((issue) => ["performance", "mobile", "trust", "security"].includes(issue.area)).slice(0, 6))}
+
+### Week 4: Validation and prevention
+
+- Re-run the site audit and compare issue count by severity and affected URLs.
+- Validate representative URLs from each affected template.
+- Add acceptance checks to page templates so titles, descriptions, canonicals, schema, and analytics ship by default.
+- Create owner, due date, and validation evidence for every remaining Medium and Low pattern.
+
+## Pages Audited
+
+| URL | Status | Issues | Title | Rendered DOM |
+| --- | ---: | ---: | --- | --- |
+${audit.pages.map((page) => `| ${escapeTable(page.url)} | ${page.status} | ${page.issues.length} | ${escapeTable(page.facts.title || "Not found")} | ${renderStatus(page)} |`).join("\n")}
+
+## Notes
+
+Static findings come from initial HTML responses. Rendered-DOM findings use Playwright when available. Aggregated issues are grouped by area, severity, title, fix, and validation guidance so repeated template problems are easier to prioritize.
+
+${siteNotes(audit)}
+`;
+}
+
 function executiveSummary(audit, blockers) {
   const issueCount = audit.issues.length;
   const critical = audit.issues.filter((issue) => issue.severity === "Critical").length;
@@ -96,7 +172,10 @@ function groupBySeverity(issues) {
 
 function weekItems(issues) {
   if (!issues.length) return "- No matching issues detected in this phase.";
-  return issues.map((issue) => `- ${issue.title}: ${issue.fix}`).join("\n");
+  return issues.map((issue) => {
+    const scope = issue.affectedUrls ? ` (${issue.affectedUrls.length} URL${issue.affectedUrls.length === 1 ? "" : "s"})` : "";
+    return `- ${issue.title}${scope}: ${issue.fix}`;
+  }).join("\n");
 }
 
 function toolFor(area) {
@@ -123,4 +202,46 @@ function renderStatus(audit) {
   if (audit.rendered?.ok) return "Completed";
   if (audit.rendered?.skipped) return "Skipped";
   return `Unavailable: ${audit.rendered?.error || "Unknown error"}`;
+}
+
+function siteExecutiveSummary(audit, blockers, totalPageIssues) {
+  const issueCount = audit.issues.length;
+  const critical = audit.issues.filter((issue) => issue.severity === "Critical").length;
+  const high = audit.issues.filter((issue) => issue.severity === "High").length;
+
+  if (issueCount === 0) {
+    return `The site audit covered **${audit.pages.length} URLs** and found no grouped issues. The next step is to expand crawl depth and validate rendered DOM plus field performance.`;
+  }
+
+  const topItems = blockers.slice(0, 3).map((issue) => `**${issue.title}** (${issue.affectedUrls.length} URL${issue.affectedUrls.length === 1 ? "" : "s"})`).join(", ");
+  return `The site audit covered **${audit.pages.length} URLs** and grouped **${totalPageIssues} page-level findings** into **${issueCount} issue patterns**. There are **${critical} Critical** and **${high} High** priority patterns. The biggest blockers or opportunities are: ${topItems || "the Medium priority patterns listed below"}. Prioritize fixes that affect multiple URLs or shared templates first.`;
+}
+
+function discoverySummary(audit) {
+  if (audit.discovery.method === "sitemap.xml") {
+    return `sitemap.xml (${audit.discovery.totalDiscovered} discovered, ${audit.pages.length} audited)`;
+  }
+
+  return audit.discovery.error
+    ? `fallback to start URL (${audit.discovery.error})`
+    : "fallback to start URL";
+}
+
+function affectedUrlBlock(issue) {
+  const urls = issue.affectedUrls.slice(0, 5).map((url) => `- ${url}`).join("\n");
+  const remaining = issue.affectedUrls.length > 5 ? `\n- ...and ${issue.affectedUrls.length - 5} more` : "";
+  return `### ${issue.severity}: ${issue.title}\n\n${urls}${remaining}`;
+}
+
+function siteNotes(audit) {
+  const notes = unique([
+    ...audit.auditNotes,
+    ...audit.pages.flatMap((page) => page.auditNotes || []).map((note) => `Page note: ${note}`)
+  ]);
+
+  return notes.length ? notes.map((note) => `- ${note}`).join("\n") : "- No audit runtime limitations were detected.";
+}
+
+function unique(values) {
+  return [...new Set(values)];
 }
