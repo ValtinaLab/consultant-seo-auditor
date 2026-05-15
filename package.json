@@ -1,0 +1,26 @@
+{
+  "name": "consultant-seo-auditor",
+  "version": "0.1.0",
+  "description": "Technical SEO, analytics, trust, and performance audit reports with consultant-style prioritization.",
+  "type": "module",
+  "bin": {
+    "consultant-seo-auditor": "./src/cli.js"
+  },
+  "scripts": {
+    "audit": "node src/cli.js",
+    "smoke": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "seo",
+    "technical-seo",
+    "analytics",
+    "ga4",
+    "gtm",
+    "schema",
+    "audit"
+  ],
+  "license": "MIT"
+}
