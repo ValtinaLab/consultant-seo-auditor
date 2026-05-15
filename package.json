@@ -10,6 +10,9 @@
     "audit": "node src/cli.js",
     "smoke": "node test/smoke.js"
   },
+  "optionalDependencies": {
+    "playwright": "^1.55.0"
+  },
   "engines": {
     "node": ">=20"
   },

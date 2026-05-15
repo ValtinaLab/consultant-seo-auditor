@@ -1,9 +1,11 @@
+import { renderPage } from "./renderer.js";
+
 const USER_AGENT =
-  "ConsultantSEOAuditor/0.1 (+https://github.com/your-org/consultant-seo-auditor)";
+  "ConsultantSEOAuditor/0.1 (+https://github.com/ValtinaLab/consultant-seo-auditor)";
 
 const CHECK_TIMEOUT_MS = 15000;
 
-export async function runAudit(inputUrl) {
+export async function runAudit(inputUrl, options = {}) {
   const url = normalizeUrl(inputUrl);
   const startedAt = new Date();
   const page = await fetchText(url);
@@ -26,6 +28,13 @@ export async function runAudit(inputUrl) {
   };
 
   const facts = collectFacts(context);
+  const rendered = options.render === false ? skippedRenderSnapshot() : await renderPage(url);
+  const renderedFacts = rendered.ok ? collectFacts({ ...context, html: rendered.html }) : null;
+  const renderComparison = compareRenderPasses(facts, renderedFacts);
+  context.rendered = rendered;
+  context.renderedFacts = renderedFacts;
+  context.renderComparison = renderComparison;
+
   const issues = [
     ...checkAnalytics(context, facts),
     ...checkRendering(context, facts),
@@ -43,6 +52,10 @@ export async function runAudit(inputUrl) {
     auditedAt: startedAt.toISOString(),
     status: page.status,
     facts,
+    rendered,
+    renderedFacts,
+    renderComparison,
+    auditNotes: buildAuditNotes(rendered),
     issues: rankIssues(issues)
   };
 }
@@ -153,9 +166,29 @@ function checkAnalytics(_context, facts) {
   return issues;
 }
 
-function checkRendering(_context, facts) {
+function checkRendering(context, facts) {
   const issues = [];
   const hasJsFramework = Object.values(facts.frameworkSignals).some(Boolean);
+
+  if (context.rendered.skipped) {
+    return issues;
+  }
+
+  if (!context.rendered.ok) {
+    return issues;
+  }
+
+  if (context.renderComparison.textGrowth > 1500) {
+    issues.push(issue("rendering", "High", "Medium", "Rendered DOM contains much more content than initial HTML", `Rendered text increased by ${context.renderComparison.textGrowth} characters after JavaScript execution.`, "Validate that critical content, links, metadata, and schema are server-rendered or pre-rendered.", "Compare view-source HTML, rendered DOM, and Google URL Inspection output."));
+  }
+
+  if (context.renderComparison.h1Changed) {
+    issues.push(issue("rendering", "Medium", "Low", "H1 changes after JavaScript rendering", "The H1 set differs between initial HTML and rendered DOM.", "Ensure the primary heading is stable in initial HTML and after hydration.", "Compare crawler source extraction with Playwright rendered output."));
+  }
+
+  if (context.renderComparison.schemaBlocksAdded > 0) {
+    issues.push(issue("rendering", "Medium", "Medium", "Schema is injected only after rendering", `${context.renderComparison.schemaBlocksAdded} JSON-LD block(s) appear only in the rendered DOM.`, "Prefer server-rendered JSON-LD for critical structured data.", "Validate source HTML and Rich Results Test output."));
+  }
 
   if (hasJsFramework && facts.visibleTextLength < 800) {
     issues.push(issue("rendering", "High", "Medium", "JavaScript framework with thin static content", "The HTML shows framework signals but limited readable content before JavaScript execution.", "Validate SSR or pre-rendering for the main content, title, links, and schema.", "Compare view-source HTML against rendered DOM with Playwright or Google Rich Results Test."));
@@ -402,4 +435,46 @@ function isThirdParty(src) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function skippedRenderSnapshot() {
+  return {
+    ok: false,
+    skipped: true,
+    html: "",
+    textLength: 0,
+    title: "",
+    h1s: [],
+    error: "Rendered DOM checks were disabled for this run."
+  };
+}
+
+function compareRenderPasses(staticFacts, renderedFacts) {
+  if (!renderedFacts) {
+    return {
+      available: false,
+      textGrowth: 0,
+      h1Changed: false,
+      schemaBlocksAdded: 0
+    };
+  }
+
+  return {
+    available: true,
+    textGrowth: Math.max(0, renderedFacts.visibleTextLength - staticFacts.visibleTextLength),
+    h1Changed: staticFacts.h1s.join("|") !== renderedFacts.h1s.join("|"),
+    schemaBlocksAdded: Math.max(0, renderedFacts.jsonLd.length - staticFacts.jsonLd.length)
+  };
+}
+
+function buildAuditNotes(rendered) {
+  const notes = [];
+
+  if (rendered.skipped) {
+    notes.push("Rendered DOM checks were skipped with --no-render.");
+  } else if (!rendered.ok) {
+    notes.push(`Rendered DOM checks were unavailable: ${rendered.error}`);
+  }
+
+  return notes;
 }

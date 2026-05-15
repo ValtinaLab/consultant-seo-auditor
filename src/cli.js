@@ -9,7 +9,8 @@ function parseArgs(argv) {
   const args = [...argv];
   const targetUrl = args.shift();
   const options = {
-    out: "reports/audit.md"
+    out: "reports/audit.md",
+    render: true
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -17,6 +18,8 @@ function parseArgs(argv) {
     if (arg === "--out") {
       options.out = args[index + 1];
       index += 1;
+    } else if (arg === "--no-render") {
+      options.render = false;
     } else if (arg === "--help" || arg === "-h") {
       options.help = true;
     }
@@ -34,6 +37,7 @@ Usage:
 
 Options:
   --out <path>   Markdown report path. Defaults to reports/audit.md
+  --no-render    Skip optional Playwright rendered-DOM checks
   -h, --help     Show help
 `);
 }
@@ -46,7 +50,7 @@ if (options.help || !targetUrl) {
 }
 
 try {
-  const audit = await runAudit(targetUrl);
+  const audit = await runAudit(targetUrl, { render: options.render });
   const markdown = renderMarkdownReport(audit);
   const outputPath = resolve(options.out);
 

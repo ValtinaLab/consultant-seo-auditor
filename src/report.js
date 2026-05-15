@@ -66,10 +66,14 @@ ${weekItems(audit.issues.filter((issue) => ["performance", "mobile", "trust", "s
 | robots.txt | ${audit.facts.hasRobotsTxt ? "Found" : "Not found"} |
 | XML sitemap | ${audit.facts.hasSitemap ? "Found" : "Not found"} |
 | Static visible text length | ${audit.facts.visibleTextLength} chars |
+| Rendered DOM pass | ${renderStatus(audit)} |
+| Rendered text growth | ${audit.renderComparison.available ? `${audit.renderComparison.textGrowth} chars` : "Not available"} |
 
 ## Notes
 
-This MVP performs static HTML analysis. For JavaScript-rendered sites, use the findings as a first pass and follow up with rendered DOM checks before making final SEO decisions.
+Static findings come from the initial HTML response. Rendered-DOM findings use Playwright when available, which helps validate JavaScript SEO, hydration, mobile viewport behavior, and client-injected schema.
+
+${audit.auditNotes?.length ? audit.auditNotes.map((note) => `- ${note}`).join("\n") : "- No audit runtime limitations were detected."}
 `;
 }
 
@@ -113,4 +117,10 @@ function toolFor(area) {
 
 function escapeTable(value) {
   return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function renderStatus(audit) {
+  if (audit.rendered?.ok) return "Completed";
+  if (audit.rendered?.skipped) return "Skipped";
+  return `Unavailable: ${audit.rendered?.error || "Unknown error"}`;
 }

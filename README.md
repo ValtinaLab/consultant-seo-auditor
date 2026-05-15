@@ -2,11 +2,25 @@
 
 A lightweight CLI that audits a URL for technical SEO, analytics, schema, performance, trust, and security signals, then writes a consultant-style Markdown report.
 
-This first MVP uses Node's built-in fetch and static HTML analysis. The architecture leaves room for a browser-rendered pass with Playwright for deeper SSR/CSR, JavaScript SEO, and mobile checks.
+This MVP uses Node's built-in fetch for static HTML analysis and an optional Playwright pass for rendered DOM checks. If Playwright is not installed, the CLI still runs and clearly marks rendered checks as unavailable.
 
 ## Usage
 
 ```bash
+node src/cli.js https://example.com --out reports/example.md
+```
+
+Skip browser rendering:
+
+```bash
+node src/cli.js https://example.com --out reports/example.md --no-render
+```
+
+Enable rendered-DOM checks:
+
+```bash
+npm install
+npx playwright install chromium
 node src/cli.js https://example.com --out reports/example.md
 ```
 
@@ -32,7 +46,6 @@ The report includes:
 
 ## Roadmap
 
-- Add Playwright rendering and DOM comparison.
 - Crawl multiple URLs and template groups.
 - Export HTML/PDF reports.
 - Add Lighthouse/PageSpeed integrations.
